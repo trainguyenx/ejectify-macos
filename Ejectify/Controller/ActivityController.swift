@@ -7,6 +7,7 @@
 
 import AppKit
 import OSLog
+import UserNotifications
 @preconcurrency import DiskArbitration
 
 /// Responds to sleep/lock/display events by unmounting and remounting enabled volumes.
@@ -45,6 +46,13 @@ final class ActivityController {
 
     /// Tracks whether the machine is currently awake enough to permit remounting.
     private var systemAwake = true
+
+    /// External observers interacting with NotificationCenter and NSWorkspace.
+    private var observers: [Any] = []
+    
+    private var isAutomaticSleep: Bool = false
+    private var autoQuitTask: Task<Void, Never>?
+    private var blockingProcessAlertController: BlockingProcessAlertWindowController?
 
     /// Tracks whether at least one display is awake and available.
     private var displayAwake = true
@@ -525,6 +533,14 @@ final class ActivityController {
         let succeededCount: Int
     }
 
+    /// Performs manual unmount initiated by the user.
+    func performManualUnmount(volumes: [Volume]) {
+        self.isAutomaticSleep = false
+        for volume in volumes {
+            requestUnmount(for: volume) { _ in }
+        }
+    }
+
     /// Unmounts all enabled volumes and waits for every callback to complete.
     private func unmountEnabledVolumesAndWait() async -> UnmountBatchResult {
         let enabledVolumes = Volume.mountedVolumes().filter { $0.enabled }
@@ -566,6 +582,8 @@ final class ActivityController {
         let volumeID = volume.id
         cancelPendingMountTask(for: volumeID)
         pendingUnmountCompletions[volumeID, default: []].append(completion)
+        
+        autoQuitTask?.cancel()
 
         guard !inFlightUnmounts.contains(volumeID) else {
             Self.logger.info("Unmount request joined existing in-flight operation: \(volume.logLabel, privacy: .public)")
@@ -584,9 +602,53 @@ final class ActivityController {
                 self.inFlightUnmounts.remove(volumeID)
                 if !success {
                     self.removeRemountCandidate(withID: volumeID)
+                    
+                    let url = volume.url
+                    BlockingProcessInspector.inspectLocally(volumePath: url.path) { [weak self] blockingProcesses in
+                        guard let self = self, !blockingProcesses.isEmpty else { return }
+                        
+                        if self.isAutomaticSleep {
+                            if Preference.autoQuitBlockingProcesses {
+                                self.terminateBlockingProcesses(blockingProcesses)
+                                self.autoQuitTask = Task {
+                                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                    guard !Task.isCancelled else { return }
+                                    self.requestUnmount(for: volume) { _ in }
+                                }
+                            }
+                        } else {
+                            self.showBlockingProcessAlert(processes: blockingProcesses, volume: volume)
+                        }
+                    }
+                } else {
+                    self.autoQuitTask?.cancel()
                 }
+                
                 let completions = self.pendingUnmountCompletions.removeValue(forKey: volumeID) ?? []
                 completions.forEach { $0(success) }
+            }
+        }
+    }
+    
+    private func showBlockingProcessAlert(processes: [BlockingProcess], volume: Volume) {
+        if blockingProcessAlertController == nil {
+            blockingProcessAlertController = BlockingProcessAlertWindowController(
+                failedVolumeNames: [volume.name],
+                blockingProcesses: processes,
+                onWindowWillClose: { [weak self] in
+                    self?.blockingProcessAlertController = nil
+                }
+            )
+        }
+        blockingProcessAlertController?.showFloating()
+    }
+    
+    /// Terminates blocking processes by sending a graceful quit request.
+    private func terminateBlockingProcesses(_ processes: [BlockingProcess]) {
+        for process in processes {
+            Self.logger.log("Requesting graceful quit for blocking process: \(process.name, privacy: .public) (PID \(process.pid, privacy: .public))")
+            if let app = NSRunningApplication(processIdentifier: process.pid) {
+                app.terminate()
             }
         }
     }

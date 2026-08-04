@@ -42,6 +42,12 @@ enum Preference {
         }
     }
 
+    /// If true, automatically quits blocking processes when unmounting.
+    static var autoQuitBlockingProcesses: Bool {
+        get { UserDefaults.standard.bool(forKey: "AutoQuitBlockingProcesses") }
+        set { UserDefaults.standard.set(newValue, forKey: "AutoQuitBlockingProcesses") }
+    }
+
     /// Controls whether Ejectify launches automatically at user login.
     static var launchAtLogin: Bool {
         get {

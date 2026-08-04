@@ -386,7 +386,9 @@ final class VolumeOperationRouter: @unchecked Sendable {
         guard let proxy = helperProxy(
             for: connection,
             operationDescription: "startup ping",
-            onRoutingFailure: { _ in }
+            onRoutingFailure: { [weak self] _ in
+                self?.endStartupRoutingInitialization()
+            }
         ) else {
             endStartupRoutingInitialization()
             return

@@ -7,6 +7,7 @@
 
 import Cocoa
 import OSLog
+import UserNotifications
 
 @MainActor
 
@@ -57,6 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             VolumeOperationRouter.shared.requestPrivilegedExecutionMode()
         }
 
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+
         globalHotKeyController = GlobalHotKeyController { [weak self] in
             self?.performManualUnmountAll()
         }
@@ -86,15 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let enabledVolumes = Volume.mountedVolumes().filter(\.enabled)
         Self.logger.log("Manual unmount-all triggered: \(enabledVolumes.count, privacy: .public) enabled volumes")
 
-        for volume in enabledVolumes {
-            VolumeOperationRouter.shared.unmount(
-                volumeUUID: volume.diskUUID.map { $0 as NSUUID },
-                volumeName: volume.name,
-                bsdName: volume.bsdName,
-                force: Preference.forceUnmount
-            ) { _ in }
-        }
-
+        activityController?.performManualUnmount(volumes: enabledVolumes)
         statusBar?.refreshMenu()
     }
 

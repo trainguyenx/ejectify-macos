@@ -221,6 +221,16 @@ final class StatusBarMenu: NSMenu {
         muteNotificationsItem.target = self
         muteNotificationsItem.state = isForceMuteNotificationsEnabled() ? .on : .off
         addItem(muteNotificationsItem)
+        
+        let autoQuitBlockingProcessesItem = NSMenuItem(title: String(localized: "Allow graceful quit"), action: #selector(autoQuitBlockingProcessesClicked(menuItem:)), keyEquivalent: "")
+        autoQuitBlockingProcessesItem.target = self
+        autoQuitBlockingProcessesItem.state = Preference.autoQuitBlockingProcesses ? .on : .off
+        addItem(autoQuitBlockingProcessesItem)
+    }
+
+    @objc private func autoQuitBlockingProcessesClicked(menuItem: NSMenuItem) {
+        Preference.autoQuitBlockingProcesses.toggle()
+        menuItem.state = Preference.autoQuitBlockingProcesses ? .on : .off
     }
 
     /// Converts menu state toggles to a Bool value.
