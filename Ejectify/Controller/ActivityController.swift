@@ -7,7 +7,6 @@
 
 import AppKit
 import OSLog
-import UserNotifications
 @preconcurrency import DiskArbitration
 
 /// Responds to sleep/lock/display events by unmounting and remounting enabled volumes.
@@ -47,9 +46,6 @@ final class ActivityController {
     /// Tracks whether the machine is currently awake enough to permit remounting.
     private var systemAwake = true
 
-    /// External observers interacting with NotificationCenter and NSWorkspace.
-    private var observers: [Any] = []
-    
     private var isAutomaticSleep: Bool = false
     private var autoQuitTask: Task<Void, Never>?
     private var blockingProcessAlertController: BlockingProcessAlertWindowController?
@@ -543,6 +539,7 @@ final class ActivityController {
 
     /// Unmounts all enabled volumes and waits for every callback to complete.
     private func unmountEnabledVolumesAndWait() async -> UnmountBatchResult {
+        self.isAutomaticSleep = true
         let enabledVolumes = Volume.mountedVolumes().filter { $0.enabled }
         mergeRemountCandidates(with: enabledVolumes, reason: "Starting new system sleep unmount batch")
 

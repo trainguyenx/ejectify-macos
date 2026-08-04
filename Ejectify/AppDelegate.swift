@@ -7,7 +7,6 @@
 
 import Cocoa
 import OSLog
-import UserNotifications
 
 @MainActor
 
@@ -57,8 +56,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // First launch is the only automatic registration attempt so macOS can surface helper approval once; later retries only happen after explicit user action.
             VolumeOperationRouter.shared.requestPrivilegedExecutionMode()
         }
-
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         globalHotKeyController = GlobalHotKeyController { [weak self] in
             self?.performManualUnmountAll()
