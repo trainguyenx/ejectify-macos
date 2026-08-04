@@ -575,7 +575,7 @@ final class ActivityController {
     }
 
     /// Enqueues a routed unmount request for one volume and tracks in-flight state.
-    private func requestUnmount(for volume: Volume, completion: @escaping (Bool) -> Void) {
+    private func requestUnmount(for volume: Volume, isRetry: Bool = false, completion: @escaping (Bool) -> Void) {
         let volumeID = volume.id
         cancelPendingMountTask(for: volumeID)
         pendingUnmountCompletions[volumeID, default: []].append(completion)
@@ -607,10 +607,12 @@ final class ActivityController {
                         if self.isAutomaticSleep {
                             if Preference.autoQuitBlockingProcesses {
                                 self.terminateBlockingProcesses(blockingProcesses)
-                                self.autoQuitTask = Task {
-                                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                                    guard !Task.isCancelled else { return }
-                                    self.requestUnmount(for: volume) { _ in }
+                                if !isRetry {
+                                    self.autoQuitTask = Task {
+                                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                        guard !Task.isCancelled else { return }
+                                        self.requestUnmount(for: volume, isRetry: true) { _ in }
+                                    }
                                 }
                             }
                         } else {
